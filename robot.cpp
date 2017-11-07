@@ -28,21 +28,20 @@ public:
 
 	    }
 
-	      // Apply joint torques based on user input, and color the Joint shape red
-	      for(std::size_t i = 0; i < mRobot->getNumDofs(); ++i)
-	      {
-	        if(mForceCountDown[i] > 0)
-	        {
-	          DegreeOfFreedom* dof = mRobot->getDof(i);
-	          dof->setForce(default_torque);
+	   // Apply joint torques based on user input, and color the Joint shape red
+	   for(std::size_t i = 0; i < mRobot->getNumDofs(); ++i)
+	   {
+	     if(mForceCountDown[i] > 0)
+	     {
+	      DegreeOfFreedom* dof = mRobot->getDof(i);
+	      dof->setForce(default_torque);
+        BodyNode* bn = dof->getChildBodyNode();
+      	auto visualShapeNodes = bn->getShapeNodesWith<VisualAspect>();
+      	visualShapeNodes[0]->getVisualAspect()->setColor(dart::Color::Red());
 
-	          BodyNode* bn = dof->getChildBodyNode();
-	          auto visualShapeNodes = bn->getShapeNodesWith<VisualAspect>();
-	          visualShapeNodes[0]->getVisualAspect()->setColor(dart::Color::Red());
-
-	          --mForceCountDown[i];
-	        }
+	      --mForceCountDown[i];
 	      }
+	   }
 	    SimWindow::timeStepping();
   }
 
@@ -67,7 +66,7 @@ protected:
 
 void setGeometry(const BodyNodePtr& bn)
 {
-  // Create a BoxShape to be used for both visualization and collision checking
+  // Create a BoxShape to be used for both visualization and collishttps://github.com/tyyson/Dartion checking
   std::shared_ptr<BoxShape> box(new BoxShape(
       Eigen::Vector3d(default_width, default_width, default_height)));
 
