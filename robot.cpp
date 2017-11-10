@@ -8,29 +8,37 @@ using namespace dart::simulation;
 
 const double default_width = 0.2;
 const double default_height = 1;
-const double default_torque = 20.0;
+const double default_torque = 10.0;
 const double default_rest_position = 0.0;
 const double zero_x = 321.0;
 const double zero_y = 305.0;
 const double radian = M_PI / 180.0;
+const double DiffLimit = 0.03;
+const double kp = 1.5;
+const double kv = pow(kp , 2.0);
 const int default_countdown = 100;
 const int length_BodyNode = 110.0;
 
-double angle_theta_first = 0.0;
-double angle_theta_second = 0.0;
+double first = 0.0;
+double second = 0.0;
 
 class MyWindow : public dart::gui::SimWindow
+
 {
 public:
 	MyWindow(WorldPtr world)
-	: mBallConstraint(nullptr)
+	: j1_rotation(0.0),
+		j2_rotation(0.0),
+		j1d(0.0),
+		j2d(0.0)
 	{
 		setWorld(world);
 		mRobot = world->getSkeleton("robot");
-		mForceCountDown.resize(mRobot->getNumDofs(), 0);
 		assert(mRobot != nullptr);
 
+
 	}
+
 
 
 	void Calc(int _x,int _y)
@@ -44,20 +52,20 @@ public:
 		double denominator = 2 * pow(length_BodyNode,2.0);
 
 		//std::cout<<"num / denom val equals to : " << numerator / denominator << std::endl;
-		angle_theta_second = acos(numerator/denominator);
-		if(new_x < 0) angle_theta_second = -angle_theta_second;
+		second = acos(numerator/denominator);
+		if(new_x < 0) second = -second;
 
-		double k1 = length_BodyNode + length_BodyNode * cos(angle_theta_second);
-		double k2 = length_BodyNode * sin(angle_theta_second);
+		double k1 = length_BodyNode + length_BodyNode * cos(second);
+		double k2 = length_BodyNode * sin(second);
 
-		angle_theta_first = atan2(new_x,new_y) - atan2(k2,k1);
+		first = atan2(new_x,new_y) - atan2(k2,k1);
 
 
-		if(angle_theta_second == angle_theta_second) {
-		std::cout<<
+		if(second == second) {
+		/*std::cout<<
 		"###########  IN ANGLE  #################"<<std::endl<<
-		"calculated theta #1 : " << angle_theta_first / radian << std::endl<<
-		"calculated theta #2 : " << angle_theta_second / radian <<std::endl<<std::endl;
+		"calculated theta #1 : " << first / radian << std::endl<<
+		"calculated theta #2 : " << second / radian <<std::endl<<std::endl;*/
 		}
 		else{
 			std::cout<< "unreachable ! ...  position reset . . ." <<std::endl;
@@ -66,24 +74,71 @@ public:
 		Joint* j1 = mRobot->getDof(4)->getJoint();
 		Joint* j2 = mRobot->getDof(7)->getJoint();
 		std::size_t index = 1;
-		j1->setPosition( index , angle_theta_first);
-		j2->setPosition( index , angle_theta_second);
+
+		j1d = first;
+		j2d = second;
+
+		//j1->setPosition( index , first);
+		//j2->setPosition( index , second);
 
 		mRobot->computeForwardKinematics();
 	}
+
+	double diff(double desired, double current){return desired - current;}
+	double abs(double d){return d > 0 ? d : -d;}
+	bool isNan(double d){return d == d ? false : true;}
+
 	void timeStepping() override
 	{
-	    for(std::size_t i = 0; i < mRobot->getNumBodyNodes(); i++)
-	    {
-	      BodyNode* bn = mRobot->getBodyNode(i);
-	      auto visualShapeNodes = bn->getShapeNodesWith<VisualAspect>();
+		DegreeOfFreedom* dofj1 = mRobot->getDof(4);
+		DegreeOfFreedom* dofj2 = mRobot->getDof(7);
 
-				for(std::size_t j = 0; j < 2; ++j)
-        visualShapeNodes[j]->getVisualAspect()->setColor(dart::Color::Blue());
+		j1_rotation = dofj1->getJoint()->getPosition(1);
+		j2_rotation = dofj2->getJoint()->getPosition(1);
 
-	    }
+		std::cout<<
+		"j1 rotation is  : " << j1_rotation << std::endl <<
+		"j2 rotation is : " << j2_rotation << std::endl;
 
-	   for(std::size_t i = 0; i < mRobot->getNumDofs(); ++i)
+		double j1diff = diff(j1d, j1_rotation);
+		double j2diff = diff(j2d, j2_rotation);
+
+		std::cout<<
+		"difference with j1d is : " << j1diff << std::endl <<
+		"difference with j2d is : " << j2diff << std::endl;
+		/*std::cout<<
+		"current joint #1 acceleration : " << docurrentfj1->getJoint()->getVelocity(1) << std::endl<<
+		"current joint #2 acceleration : " << dofj2->getJoint()->getVelocity(1) << std::endl;*/
+
+
+		double Force1 = (kp * j1diff - kv * dofj1->getJoint()->getVelocity(1));
+		double Force2 = (kp * j2diff - kv * dofj2->getJoint()->getVelocity(1));
+
+
+		if(abs(j1diff) > DiffLimit && !isNan(Force1)) {
+			dofj1->setForce(Force1);
+			std::cout<<"force applied #1 : " << Force1 << std::endl;
+		}
+		else {
+			dofj1->resetVelocity();
+			std::cout<<"#1 velocity reset "<< std::endl;
+		}
+
+		if(abs(j2diff) > DiffLimit && !isNan(Force2))
+		{
+			dofj2->setForce(Force2);
+			std::cout<<"force applied #2 : " << Force2 << std::endl;
+		}
+		else {
+			dofj2->resetVelocity();
+			std::cout<<"#2 velocity reset "<< std::endl;
+		}
+
+
+
+		mRobot->getDof(1)->resetVelocity();
+
+	   /*for(std::size_t i = 0; i < mRobot->getNumDofs(); ++i)
 	   {
 			 if(mForceCountDown[i] > 0)
         {
@@ -100,7 +155,7 @@ public:
 					DegreeOfFreedom* dof = mRobot->getDof(i);
 					dof->resetVelocity();
 				}
-	   }
+	   }*/
 	    SimWindow::timeStepping();
   }
 
@@ -130,12 +185,6 @@ public:
 			mZoom = 0.2;
 	}
 
-	void applyTorque(std::size_t _index)
-	{
-		if(_index < mForceCountDown.size()){
-			mForceCountDown[_index] = default_countdown;
-		}
-	}
 
 	/*void keyboard(unsigned char key, int x,int y) override
 	{
@@ -157,8 +206,10 @@ public:
 
 protected:
 	SkeletonPtr mRobot;
-	std::vector<int> mForceCountDown;
-	dart::constraint::BallJointConstraintPtr mBallConstraint;
+	double j1_rotation;
+	double j2_rotation;
+	double j1d;
+	double j2d;
 };
 
 void setGeometry(const BodyNodePtr& bn)
